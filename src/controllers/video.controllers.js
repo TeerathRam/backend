@@ -40,18 +40,18 @@ const getAllVideos = asyncHandler(async (req, res) => {
   const videos = await Video.paginate(options);
 
   if (!videos) {
-    throw new ApiError(404, "Videos not found");
+    throw new ApiError(404, "Videos not found.");
   }
 
   return res
     .status(200)
-    .json(new ApiResponse(200, videos, "Videos fetched successfully"));
+    .json(new ApiResponse(200, videos, "Videos fetched successfully."));
 });
 
 const publishAVideo = asyncHandler(async (req, res) => {
   const { title, description } = req.body;
   if (!(title && description)) {
-    throw new ApiError(400, "Title and description is required");
+    throw new ApiError(400, "Title and description is required.");
   }
 
   let videoLocalPath;
@@ -64,7 +64,7 @@ const publishAVideo = asyncHandler(async (req, res) => {
   }
 
   if (!videoLocalPath) {
-    throw new ApiError(400, "Video file is required");
+    throw new ApiError(400, "Video file is required.");
   }
 
   let thumbnailLocalPth;
@@ -77,14 +77,14 @@ const publishAVideo = asyncHandler(async (req, res) => {
   }
 
   if (!thumbnailLocalPth) {
-    throw new ApiError(400, "Thumbnail is required");
+    throw new ApiError(400, "Thumbnail file is required.");
   }
 
   const videoFile = await uploadOnCloudinary(videoLocalPath);
   if (!videoFile.url) {
     throw new ApiError(
       400,
-      "Something went wrong while uploading video on cloudinary"
+      "Something went wrong while uploading video on cloudinary."
     );
   }
 
@@ -92,7 +92,7 @@ const publishAVideo = asyncHandler(async (req, res) => {
   if (!thumbnail.url) {
     throw new ApiError(
       400,
-      "Something went wrong while uploading video thumbnail on cloudinary"
+      "Something went wrong while uploading video thumbnail on cloudinary."
     );
   }
 
@@ -109,55 +109,31 @@ const publishAVideo = asyncHandler(async (req, res) => {
     const publishedVideo = await Video.findById(video?._id);
 
     if (!publishedVideo) {
-      throw new ApiError(400, "Error while publishing video");
+      throw new ApiError(400, "Error while publishing video.");
     }
 
     return res
       .status(201)
-      .json(new ApiResponse(201, publishedVideo, "Video created successfully"));
+      .json(
+        new ApiResponse(201, publishedVideo, "Video created successfully.")
+      );
   } catch (error) {
     await deleteFileOnCloudinary(videoFile?.url);
     await deleteFileOnCloudinary(thumbnail?.url);
-    throw new ApiError(500, "error while creating video");
+    throw new ApiError(500, "error while creating video.");
   }
 });
 
 const getVideoById = asyncHandler(async (req, res) => {
   const { videoId } = req.params;
   if (!videoId?.trim() || !isValidObjectId(videoId)) {
-    throw new ApiError(400, "Invalid video id");
+    throw new ApiError(400, "Invalid video id.");
   }
 
   const video = await Video.aggregate([
     {
       $match: {
         _id: new mongoose.Types.ObjectId(videoId),
-      },
-    },
-    {
-      $lookup: {
-        from: "comments",
-        localField: "_id",
-        foreignField: "video",
-        as: "comments",
-        pipeline: [
-          {
-            $lookup: {
-              from: "users",
-              localField: "owner",
-              foreignField: "_id",
-              as: "owner",
-              pipeline: [
-                {
-                  $project: {
-                    username: 1,
-                    avatar: 1,
-                  },
-                },
-              ],
-            },
-          },
-        ],
       },
     },
     {
@@ -190,9 +166,6 @@ const getVideoById = asyncHandler(async (req, res) => {
         owner: {
           $first: "$owner",
         },
-        totalComments: {
-          $size: "$comments",
-        },
         totalLiks: {
           $size: "$likes",
         },
@@ -201,7 +174,7 @@ const getVideoById = asyncHandler(async (req, res) => {
   ]);
 
   if (!video) {
-    throw new ApiError(404, "Video not found");
+    throw new ApiError(404, "Video with this id is not found.");
   }
 
   const fetchedVideo = await Video.findByIdAndUpdate(
@@ -217,7 +190,7 @@ const getVideoById = asyncHandler(async (req, res) => {
   );
 
   if (!fetchedVideo) {
-    throw new ApiError(404, "error while updating video views");
+    throw new ApiError(404, "Error while updating video views.");
   }
 
   const user = await User.findById(req.user?._id);
