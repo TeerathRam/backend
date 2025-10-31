@@ -31,15 +31,30 @@ const getUserTweets = asyncHandler(async (req, res) => {
     throw new ApiError(400, "Invalid user id or user id is required");
   }
 
-  const tweets = await Tweet.find({ owner: userId });
-
-  if (!tweets) {
-    throw new ApiError(404, "Tweets not found");
-  }
+  const tweets = await Tweet.aggregate([
+    {
+      $match: {
+        owner: new mongoose.Types.ObjectId(userId),
+      },
+    },
+    {
+      $lookup: {
+        from: "likes",
+        foreignField: "tweet",
+        localField: "_id",
+        as: "likes",
+      },
+    },
+    {
+      $addFields: {
+        likesCount: { $size: "$likes" },
+      },
+    },
+  ]);
 
   return res
     .status(200)
-    .json(new ApiResponse(200, tweets, "Tweets fetched successfully"));
+    .json(new ApiResponse(200, tweets[0], "Tweets fetched successfully"));
 });
 
 const updateTweet = asyncHandler(async (req, res) => {
