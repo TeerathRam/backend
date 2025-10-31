@@ -8,7 +8,7 @@ import { ApiResponse } from "../utils/apiResponse.js";
 const createTweet = asyncHandler(async (req, res) => {
   const { content } = req.body;
   if (!content) {
-    throw new ApiError(400, "Content is required");
+    throw new ApiError(400, "Content is required.");
   }
 
   const tweet = await Tweet.create({
@@ -17,18 +17,18 @@ const createTweet = asyncHandler(async (req, res) => {
   });
 
   if (!tweet) {
-    throw new ApiError(500, "Error while creating tweet");
+    throw new ApiError(500, "Error while creating tweet.");
   }
 
   return res
     .status(201)
-    .json(new ApiResponse(201, tweet, "tweet created successfully"));
+    .json(new ApiResponse(201, tweet, "Tweet created successfully."));
 });
 
 const getUserTweets = asyncHandler(async (req, res) => {
   const { userId } = req.params;
   if (!userId.trim() || !isValidObjectId(userId)) {
-    throw new ApiError(400, "Invalid user id or user id is required");
+    throw new ApiError(400, "Invalid user id or user id is required.");
   }
 
   const tweets = await Tweet.aggregate([
@@ -54,31 +54,31 @@ const getUserTweets = asyncHandler(async (req, res) => {
 
   return res
     .status(200)
-    .json(new ApiResponse(200, tweets[0], "Tweets fetched successfully"));
+    .json(new ApiResponse(200, tweets[0], "Tweets fetched successfully."));
 });
 
 const updateTweet = asyncHandler(async (req, res) => {
   const { content } = req.body;
   if (!content) {
-    throw new ApiError(400, "New content is required");
+    throw new ApiError(400, "New content is required.");
   }
 
   const { tweetId } = req.params;
   if (!tweetId.trim() || !isValidObjectId(tweetId)) {
     throw new ApiError(
       401,
-      "tweet with given id not found or Invalid tweet id"
+      "Tweet with given id not found or invalid tweet id."
     );
   }
 
   const tweet = await Tweet.findById(tweetId);
 
   if (!tweet) {
-    throw new ApiError(404, "Tweet not found");
+    throw new ApiError(404, "Tweet with given id not found.");
   }
 
   if (tweet.owner.toString() !== req.user?._id.toString()) {
-    throw new ApiError(403, "You are not authorized to update this tweet");
+    throw new ApiError(403, "You are not authorized to update this tweet.");
   }
 
   const updatedTweet = await Tweet.findByIdAndUpdate(
@@ -94,18 +94,18 @@ const updateTweet = asyncHandler(async (req, res) => {
   );
 
   if (!updatedTweet) {
-    throw new ApiError(500, "Error while updating the tweet");
+    throw new ApiError(500, "Error while updating tweet.");
   }
 
   return res
     .status(200)
-    .json(new ApiResponse(200, updatedTweet, "Tweet updated successfully"));
+    .json(new ApiResponse(200, updatedTweet, "Tweet updated successfully."));
 });
 
 const deleteTweet = asyncHandler(async (req, res) => {
   const { tweetId } = req.params;
   if (!tweetId.trim() || !isValidObjectId(tweetId)) {
-    throw new ApiError(400, "Invalid tweet id or tweet id is required");
+    throw new ApiError(400, "Invalid tweet id or tweet id is required.");
   }
 
   const tweet = await Tweet.findById(tweetId);
@@ -115,13 +115,13 @@ const deleteTweet = asyncHandler(async (req, res) => {
   }
 
   if (tweet.owner.toString() !== req.user._id.toString()) {
-    throw new ApiError(403, "You are not authorized to delete this tweet");
+    throw new ApiError(403, "You are not authorized to delete this tweet.");
   }
 
   const deletedTweet = await Tweet.findByIdAndDelete(tweetId);
 
   if (!deletedTweet) {
-    throw new ApiError(500, "Error while deleting the tweet");
+    throw new ApiError(500, "Error while deleting tweet.");
   }
 
   const deletedLikes = await Like.deleteMany({
@@ -129,18 +129,18 @@ const deleteTweet = asyncHandler(async (req, res) => {
   });
 
   if (!deletedLikes) {
-    throw new ApiError(500, "Error while deleting tweet likes");
+    throw new ApiError(500, "Error while deleting tweet likes.");
   }
 
   return res
     .status(200)
-    .json(new ApiResponse(200, {}, "Tweet deleted successfully"));
+    .json(new ApiResponse(200, {}, "Tweet deleted successfully."));
 });
 
 const getTweetById = asyncHandler(async (req, res) => {
   const { tweetId } = req.params;
   if (!tweetId.trim() || !isValidObjectId(tweetId)) {
-    throw new ApiError(400, "Invalid tweet id or tweet id is required");
+    throw new ApiError(400, "Invalid tweet id or tweet id is required.");
   }
 
   const tweet = await Tweet.aggregate([
@@ -184,12 +184,18 @@ const getTweetById = asyncHandler(async (req, res) => {
   ]);
 
   if (!tweet) {
-    throw new ApiError(404, "Tweet not found");
+    throw new ApiError(404, "Tweet with given tweet id not found.");
   }
 
   return res
     .status(200)
-    .json(new ApiResponse(200, tweet[0], "Tweet found successfully"));
+    .json(
+      new ApiResponse(
+        200,
+        tweet[0],
+        "Tweet with given tweet id fetched successfully."
+      )
+    );
 });
 
 export { createTweet, getUserTweets, updateTweet, deleteTweet, getTweetById };
