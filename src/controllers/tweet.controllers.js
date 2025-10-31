@@ -144,8 +144,17 @@ const getTweetById = asyncHandler(async (req, res) => {
       },
     },
     {
+      $lookup: {
+        from: "likes",
+        localField: "_id",
+        foreignField: "tweet",
+        as: "likes",
+      },
+    },
+    {
       $addFields: {
-        $first: "$owner",
+        owner: { $arrayElemAt: ["$owner", 0] },
+        likes: { $size: "$likes" },
       },
     },
   ]);
