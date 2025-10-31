@@ -1,5 +1,6 @@
 import mongoose, { isValidObjectId } from "mongoose";
 import { Tweet } from "../models/tweet.models.js";
+import { Like } from "../models/like.models.js";
 import { asyncHandler } from "../utils/asynchandler.js";
 import { ApiError } from "../utils/apiError.js";
 import { ApiResponse } from "../utils/apiResponse.js";
@@ -106,6 +107,14 @@ const deleteTweet = asyncHandler(async (req, res) => {
 
   if (!deletedTweet) {
     throw new ApiError(500, "Error while deleting the tweet");
+  }
+
+  const deletedLikes = await Like.deleteMany({
+    tweet: tweetId,
+  });
+
+  if (!deletedLikes) {
+    throw new ApiError(500, "Error while deleting tweet likes");
   }
 
   return res
