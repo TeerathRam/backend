@@ -294,7 +294,7 @@ const updateAccountDetails = asyncHandler(async (req, res) => {
     {
       new: true,
     }
-  ).select("-password");
+  ).select("-password -refreshToken -watchHistory");
 
   if (!user) {
     throw new ApiError(
