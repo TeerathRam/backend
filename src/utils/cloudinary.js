@@ -1,6 +1,7 @@
 import { v2 as cloudinary } from "cloudinary";
 import fs from "fs";
 import dotenv from "dotenv";
+// import { ApiError } from "./apiError";
 
 dotenv.config();
 
@@ -31,15 +32,17 @@ const uploadOnCloudinary = async (localFilePath) => {
   }
 };
 
-const deleteFileOnCloudinary = async (oldFileUrl) => {
+const deleteFileOnCloudinary = async (oldFileUrl, fileType) => {
   try {
     if (!oldFileUrl) return "cannot find public old avatar url";
     const publicId = oldFileUrl.split("/").pop().split(".")[0];
 
-    const response = await cloudinary.api.delete_resources([publicId], {
+    const response = await cloudinary.uploader.destroy(publicId, {
       type: "upload",
-      resource_type: "auto",
+      resource_type: fileType,
+      validate: true,
     });
+
     return response;
   } catch (error) {
     return "error while deleting the file";
