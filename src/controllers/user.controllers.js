@@ -108,9 +108,9 @@ const registerUser = asyncHandler(async (req, res) => {
       .status(201)
       .json(new ApiResponse(201, createdUser, "User registered successfully."));
   } catch (error) {
-    await deleteFileOnCloudinary(avatar.secure_url);
+    await deleteFileOnCloudinary(avatar.secure_url, "image");
     if (coverImageLocalPath) {
-      deleteFileOnCloudinary(coverImage.secure_url);
+      await deleteFileOnCloudinary(coverImage.secure_url, "image");
     }
     throw new ApiError(
       500,
@@ -124,7 +124,7 @@ const loginUser = asyncHandler(async (req, res) => {
   const { email, username, password } = req.body;
 
   // username or email
-  if (!(username && email)) {
+  if (!(username || email)) {
     throw new ApiError(400, "Username or email is required.");
   }
 
@@ -279,7 +279,7 @@ const updateAccountDetails = asyncHandler(async (req, res) => {
   const { fullName, email } = req.body;
 
   if (!(fullName || email)) {
-    throw new ApiError(400, "All field are required.");
+    throw new ApiError(400, "Full name or email are required.");
   }
 
   // updating the user document in mongodb ~> through mongoose
@@ -314,17 +314,13 @@ const updateUserAvatar = asyncHandler(async (req, res) => {
     throw new ApiError(400, "Avatar file is required.");
   }
 
-  const oldAvatarUrl = req.user?.avatar;
-  if (!oldAvatarUrl) {
-    throw new ApiError(402, "Does not found old avatar url.");
-  }
-
   const avatar = await uploadOnCloudinary(avatarLocalPath);
   if (!avatar.secure_url) {
     throw new ApiError(500, "Error while uploading avatar on cloudinary.");
   }
 
-  const response = await deleteFileOnCloudinary(oldAvatarUrl);
+  const response = await deleteFileOnCloudinary(req.user?.avatar, "image");
+
   if (!response) {
     throw new ApiError(400, "Error while deleting old avatar from cloudinary.");
   }
@@ -344,7 +340,7 @@ const updateUserAvatar = asyncHandler(async (req, res) => {
       .status(200)
       .json(new ApiResponse(200, user, "Avatar updated successfully."));
   } catch (error) {
-    deleteFileOnCloudinary(avatar.secure_url);
+    await deleteFileOnCloudinary(avatar.secure_url, "image");
     throw new ApiError(500, "Error while updating avatar.");
   }
 });
@@ -355,38 +351,42 @@ const updateUserCoverImage = asyncHandler(async (req, res) => {
     throw new ApiError(400, "Cover image file is required.");
   }
 
-  const oldCoverImageUrl = req.user?.coverImage;
-  if (!oldCoverImageUrl) {
-    throw new ApiError(402, "Does not found old cover image url.");
-  }
-
   const coverImage = await uploadOnCloudinary(coverImageLocalPath);
-  if (!coverImage.url) {
+  if (!coverImage.secure_url) {
     throw new ApiError(400, "Error while uploading cover image on cloudinary.");
   }
 
-  const user = await User.findByIdAndUpdate(
-    req.user?._id,
-    {
-      $set: {
-        coverImage: coverImage.url,
-      },
-    },
-    { new: true }
-  ).select("-password");
-
-  const response = await deleteFileOnCloudinary(oldCoverImageUrl);
-
-  if (!response) {
-    throw new ApiError(
-      400,
-      "Error while deleting old cover image from cloudinary."
+  if (req.user?.coverImage) {
+    const response = await deleteFileOnCloudinary(
+      req.user?.coverImage,
+      "image"
     );
+    if (!response) {
+      throw new ApiError(
+        400,
+        "Error while deleting old cover image from cloudinary."
+      );
+    }
   }
 
-  return res
-    .status(200)
-    .json(new ApiResponse(200, user, "Cover image updated successfully"));
+  try {
+    const user = await User.findByIdAndUpdate(
+      req.user?._id,
+      {
+        $set: {
+          coverImage: coverImage.secure_url,
+        },
+      },
+      { new: true }
+    ).select("-password -refreshToken -watchHistory");
+
+    return res
+      .status(200)
+      .json(new ApiResponse(200, user, "Cover image updated successfully"));
+  } catch (error) {
+    await deleteFileOnCloudinary(coverImage?.secure_url, "image");
+    throw new ApiError(500, "Error while updating cover image.");
+  }
 });
 
 const getUserChannelProfile = asyncHandler(async (req, res) => {
