@@ -130,10 +130,31 @@ const getVideoById = asyncHandler(async (req, res) => {
     throw new ApiError(400, "Invalid video id.");
   }
 
-  const video = await Video.aggregate([
+  const video = await Video.findById(videoId);
+  if (!video) {
+    throw new ApiError(404, "Video with given id not found.");
+  }
+
+  if (video?.owner !== req.user?._id) {
+    const fetchedVideo = await Video.findByIdAndUpdate(
+      video?._id,
+      {
+        $inc: {
+          views: 1,
+        },
+      },
+      { new: true }
+    );
+
+    if (!fetchedVideo) {
+      throw new ApiError(404, "Error while updating video views.");
+    }
+  }
+
+  const updatedVideo = await Video.aggregate([
     {
       $match: {
-        _id: new mongoose.Types.ObjectId(videoId),
+        _id: new mongoose.Types.ObjectId(video?._id),
       },
     },
     {
@@ -180,27 +201,12 @@ const getVideoById = asyncHandler(async (req, res) => {
   }
 
   // only increment views if video owner is not the user
-  if (video[0]?.owner !== req.user?._id) {
-    const fetchedVideo = await Video.findByIdAndUpdate(
-      video[0]?._id,
-      {
-        $inc: {
-          views: 1,
-        },
-      },
-      { new: true }
-    );
-
-    if (!fetchedVideo) {
-      throw new ApiError(404, "Error while updating video views.");
-    }
-  }
 
   const user = await User.findByIdAndUpdate(
     req.user?._id,
     {
       $push: {
-        watchHistory: video[0]?._id,
+        watchHistory: updatedVideo[0]?._id,
       },
     },
     {
@@ -214,7 +220,7 @@ const getVideoById = asyncHandler(async (req, res) => {
 
   return res
     .status(200)
-    .json(new ApiResponse(200, video[0], "Video fetched successfully."));
+    .json(new ApiResponse(200, updatedVideo[0], "Video fetched successfully."));
 });
 
 const updateVideo = asyncHandler(async (req, res) => {
@@ -274,7 +280,7 @@ const updateVideo = asyncHandler(async (req, res) => {
       .status(200)
       .json(new ApiResponse(200, updatedVideo, "Video updated successfully."));
   } catch (error) {
-    await deleteFileOnCloudinary(thumbnail?.secure_url);
+    await deleteFileOnCloudinary(thumbnail?.secure_url, "image");
     throw new ApiError(500, "Error while updating video.");
   }
 });
@@ -293,15 +299,21 @@ const deleteVideo = asyncHandler(async (req, res) => {
 
   const { thumbnail, videoFile } = video;
 
-  const deleteThumbnailOnCloudinary = await deleteFileOnCloudinary(thumbnail);
+  const deleteThumbnailOnCloudinary = await deleteFileOnCloudinary(
+    thumbnail,
+    "image"
+  );
   if (!deleteThumbnailOnCloudinary) {
     throw new ApiError(
       501,
-      "Error while removing  thumbnail file from cloudinary."
+      "Error while removing thumbnail file from cloudinary."
     );
   }
 
-  const deleteVideoOnCloudinary = await deleteFileOnCloudinary(videoFile);
+  const deleteVideoOnCloudinary = await deleteFileOnCloudinary(
+    videoFile,
+    "video"
+  );
 
   if (!deleteVideoOnCloudinary) {
     throw new ApiError(501, "Error while removing video file on cloudinary.");
@@ -338,7 +350,7 @@ const togglePublishStatus = asyncHandler(async (req, res) => {
     videoId,
     {
       $set: {
-        isPublised: !isPublised,
+        isPublished: !video.isPublished,
       },
     },
     {
