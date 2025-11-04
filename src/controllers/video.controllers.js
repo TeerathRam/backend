@@ -81,7 +81,7 @@ const publishAVideo = asyncHandler(async (req, res) => {
   }
 
   const videoFile = await uploadOnCloudinary(videoLocalPath);
-  if (!videoFile.url) {
+  if (!videoFile.secure_url) {
     throw new ApiError(
       400,
       "Something went wrong while uploading video on cloudinary."
@@ -89,7 +89,7 @@ const publishAVideo = asyncHandler(async (req, res) => {
   }
 
   const thumbnail = await uploadOnCloudinary(thumbnailLocalPth);
-  if (!thumbnail.url) {
+  if (!thumbnail.secure_url) {
     throw new ApiError(
       400,
       "Something went wrong while uploading video thumbnail on cloudinary."
@@ -101,8 +101,8 @@ const publishAVideo = asyncHandler(async (req, res) => {
       title,
       description,
       duration: videoFile?.duration,
-      videoFile: videoFile?.url,
-      thumbnail: thumbnail?.url,
+      videoFile: videoFile?.secure_url,
+      thumbnail: thumbnail?.secure_url,
       owner: req.user?._id,
     });
 
@@ -118,9 +118,9 @@ const publishAVideo = asyncHandler(async (req, res) => {
         new ApiResponse(201, publishedVideo, "Video created successfully.")
       );
   } catch (error) {
-    await deleteFileOnCloudinary(videoFile?.url);
-    await deleteFileOnCloudinary(thumbnail?.url);
-    throw new ApiError(500, "error while creating video.");
+    await deleteFileOnCloudinary(videoFile?.secure_url, "video");
+    await deleteFileOnCloudinary(thumbnail?.secure_url, "image");
+    throw new ApiError(500, "Error while creating video.");
   }
 });
 
@@ -147,7 +147,6 @@ const getVideoById = asyncHandler(async (req, res) => {
             $project: {
               username: 1,
               avatar: 1,
-              coverImage: 1,
             },
           },
         ],
@@ -166,8 +165,11 @@ const getVideoById = asyncHandler(async (req, res) => {
         owner: {
           $first: "$owner",
         },
-        totalLiks: {
-          $size: "$likes",
+        likes: {
+          $sum: "$likes",
+        },
+        isLiked: {
+          $in: [req.user?._id, "$likes.likedBy"],
         },
       },
     },
@@ -177,11 +179,28 @@ const getVideoById = asyncHandler(async (req, res) => {
     throw new ApiError(404, "Video with this id is not found.");
   }
 
-  const fetchedVideo = await Video.findByIdAndUpdate(
-    video._id,
+  // only increment views if video owner is not the user
+  if (video[0]?.owner !== req.user?._id) {
+    const fetchedVideo = await Video.findByIdAndUpdate(
+      video[0]?._id,
+      {
+        $inc: {
+          views: 1,
+        },
+      },
+      { new: true }
+    );
+
+    if (!fetchedVideo) {
+      throw new ApiError(404, "Error while updating video views.");
+    }
+  }
+
+  const user = await User.findByIdAndUpdate(
+    req.user?._id,
     {
-      $set: {
-        views: views++,
+      $push: {
+        watchHistory: video[0]?._id,
       },
     },
     {
@@ -189,37 +208,33 @@ const getVideoById = asyncHandler(async (req, res) => {
     }
   );
 
-  if (!fetchedVideo) {
-    throw new ApiError(404, "Error while updating video views.");
+  if (!user) {
+    throw new ApiError(404, "Error while updating user watch history.");
   }
-
-  const user = await User.findById(req.user?._id);
-  user.watchHistory.push(fetchedVideo._id);
-  await user.save({ isNew: false });
 
   return res
     .status(200)
-    .json(new ApiResponse(200, video[0], "Video fetched successfully"));
+    .json(new ApiResponse(200, video[0], "Video fetched successfully."));
 });
 
 const updateVideo = asyncHandler(async (req, res) => {
   const { videoId } = req.params;
   if (!videoId?.trim() || !isValidObjectId(videoId)) {
-    throw new ApiError(400, "Invalid video id");
+    throw new ApiError(400, "Invalid video id.");
   }
 
   const video = await Video.findById(videoId);
   if (!video) {
-    throw new ApiError(404, "Video not found");
+    throw new ApiError(404, "Video with this id is not found.");
   }
 
   if (video.owner.toString() !== req.user?._id.toString()) {
-    throw new ApiError(403, "You are not authorized to update this video");
+    throw new ApiError(403, "You are not authorized to update this video.");
   }
 
   const { title, description } = req.body; // validate every field seperete
   if (!(title || description)) {
-    throw new ApiError(400, "Tittle or discription is required");
+    throw new ApiError(400, "Tittle or discription is required.");
   }
 
   let thumbnailLocalPth;
@@ -228,12 +243,12 @@ const updateVideo = asyncHandler(async (req, res) => {
   }
 
   if (!thumbnailLocalPth) {
-    throw new ApiError(400, "Thumbnail is required");
+    throw new ApiError(400, "Thumbnail file is required.");
   }
 
   const thumbnail = await uploadOnCloudinary(thumbnailLocalPth);
-  if (!thumbnail.url) {
-    throw new ApiError(400, "Error while uploading thumbnail on cloudinary");
+  if (!thumbnail.secure_url) {
+    throw new ApiError(400, "Error while uploading thumbnail on cloudinary.");
   }
 
   try {
@@ -243,7 +258,7 @@ const updateVideo = asyncHandler(async (req, res) => {
         $set: {
           title,
           description,
-          thumbnail: thumbnail?.url,
+          thumbnail: thumbnail?.secure_url,
         },
       },
       {
@@ -252,28 +267,28 @@ const updateVideo = asyncHandler(async (req, res) => {
     );
 
     if (!updatedVideo) {
-      throw new ApiError(400, "Error while updating video");
+      throw new ApiError(400, "Error while updating video.");
     }
 
     return res
       .status(200)
-      .json(new ApiResponse(200, updatedVideo, "Video updated successfully"));
+      .json(new ApiResponse(200, updatedVideo, "Video updated successfully."));
   } catch (error) {
-    await deleteFileOnCloudinary(thumbnail?.url);
-    throw new ApiError(500, "Error while updating video");
+    await deleteFileOnCloudinary(thumbnail?.secure_url);
+    throw new ApiError(500, "Error while updating video.");
   }
 });
 
 const deleteVideo = asyncHandler(async (req, res) => {
   const { videoId } = req.params;
   if (!videoId?.trim() || !isValidObjectId(videoId)) {
-    throw new ApiError(400, "Invalid video id");
+    throw new ApiError(400, "Invalid video id.");
   }
 
   const video = await Video.findById(videoId);
 
   if (video.owner.toString() !== req.user?._id.toString()) {
-    throw new ApiError(403, "You are not authorized to update this video");
+    throw new ApiError(403, "You are not authorized to delete this video.");
   }
 
   const { thumbnail, videoFile } = video;
@@ -282,41 +297,41 @@ const deleteVideo = asyncHandler(async (req, res) => {
   if (!deleteThumbnailOnCloudinary) {
     throw new ApiError(
       501,
-      "Error while removing  thumbnail file from cloudinary"
+      "Error while removing  thumbnail file from cloudinary."
     );
   }
 
   const deleteVideoOnCloudinary = await deleteFileOnCloudinary(videoFile);
 
   if (!deleteVideoOnCloudinary) {
-    throw new ApiError(501, "Error while removing video file on cloudinary");
+    throw new ApiError(501, "Error while removing video file on cloudinary.");
   }
 
   const deleteVideo = await Video.findByIdAndDelete(videoId);
 
   if (!deleteVideo) {
-    throw new ApiError(500, "Error while deleting the video");
+    throw new ApiError(500, "Error while deleting the video.");
   }
 
   return res
     .status(200)
-    .json(new ApiResponse(200, {}, "Vidoe deleted successfully"));
+    .json(new ApiResponse(200, {}, "Vidoe deleted successfully."));
 });
 
 const togglePublishStatus = asyncHandler(async (req, res) => {
   const { videoId } = req.params;
   if (!videoId?.trim() || !isValidObjectId(videoId)) {
-    throw new ApiError(400, "Invalid video id");
+    throw new ApiError(400, "Invalid video id.");
   }
 
   const video = await Video.findById(videoId);
 
   if (!video) {
-    throw new ApiError(404, "Video not found");
+    throw new ApiError(404, "Video not found.");
   }
 
   if (video.owner.toString() !== req.user?._id.toString()) {
-    throw new ApiError(403, "You are not authorized to update this video");
+    throw new ApiError(403, "You are not authorized to update this video.");
   }
 
   const updatedVideo = await Video.findByIdAndUpdate(
@@ -332,13 +347,13 @@ const togglePublishStatus = asyncHandler(async (req, res) => {
   );
 
   if (!updatedVideo) {
-    throw new ApiError(500, "Error while updateting toggle status of video");
+    throw new ApiError(500, "Error while toggling publish status of video.");
   }
 
   return res
     .status(200)
     .json(
-      new ApiResponse(200, updatedVideo, "Toggle status changed successfully")
+      new ApiResponse(200, updatedVideo, "Publish status updated successfully.")
     );
 });
 
