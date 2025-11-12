@@ -140,11 +140,11 @@ const loginUser = asyncHandler(async (req, res) => {
   // password check
   const isPasswordValid = await user.isPasswordCorrect(password);
 
-  // generate access and refresh token
   if (!isPasswordValid) {
     throw new ApiError(401, "Password is incorrect.");
   }
 
+  // generate access and refresh token
   const { generatedAccessToken, generatedRefreshToken } =
     await generateAccessAndRefreshTokens(user._id);
 
@@ -278,7 +278,7 @@ const getCurrentUser = asyncHandler(async (req, res) => {
 const updateAccountDetails = asyncHandler(async (req, res) => {
   const { fullName, email } = req.body;
 
-  if (!(fullName || email)) {
+  if (!(fullName && email)) {
     throw new ApiError(400, "Full name or email are required.");
   }
 
@@ -293,6 +293,7 @@ const updateAccountDetails = asyncHandler(async (req, res) => {
     },
     {
       new: true,
+      runValidators: true,
     }
   ).select("-password -refreshToken -watchHistory");
 
@@ -319,12 +320,6 @@ const updateUserAvatar = asyncHandler(async (req, res) => {
     throw new ApiError(500, "Error while uploading avatar on cloudinary.");
   }
 
-  const response = await deleteFileOnCloudinary(req.user?.avatar, "image");
-
-  if (!response) {
-    throw new ApiError(400, "Error while deleting old avatar from cloudinary.");
-  }
-
   try {
     const user = await User.findByIdAndUpdate(
       req.user?._id,
@@ -333,8 +328,17 @@ const updateUserAvatar = asyncHandler(async (req, res) => {
           avatar: avatar.secure_url,
         },
       },
-      { new: true }
+      { new: true, runValidators: true }
     ).select("-password -refreshToken -watchHistory");
+
+    const response = await deleteFileOnCloudinary(req.user?.avatar, "image");
+
+    if (!response) {
+      throw new ApiError(
+        400,
+        "Error while deleting old avatar from cloudinary."
+      );
+    }
 
     return res
       .status(200)
@@ -356,18 +360,7 @@ const updateUserCoverImage = asyncHandler(async (req, res) => {
     throw new ApiError(400, "Error while uploading cover image on cloudinary.");
   }
 
-  if (req.user?.coverImage) {
-    const response = await deleteFileOnCloudinary(
-      req.user?.coverImage,
-      "image"
-    );
-    if (!response) {
-      throw new ApiError(
-        400,
-        "Error while deleting old cover image from cloudinary."
-      );
-    }
-  }
+  const oldCoverImage = req.user?.coverImage ? req.user?.coverImage : "";
 
   try {
     const user = await User.findByIdAndUpdate(
@@ -379,6 +372,15 @@ const updateUserCoverImage = asyncHandler(async (req, res) => {
       },
       { new: true }
     ).select("-password -refreshToken -watchHistory");
+
+    const response = await deleteFileOnCloudinary(oldCoverImage, "image");
+
+    if (!response) {
+      throw new ApiError(
+        400,
+        "Error while deleting old cover image from cloudinary."
+      );
+    }
 
     return res
       .status(200)
