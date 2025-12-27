@@ -4,6 +4,9 @@ import { ApiResponse } from "../utils/apiResponse.js";
 import { asyncHandler } from "../utils/asynchandler.js";
 import { Video } from "../models/video.models.js";
 import { User } from "../models/user.models.js";
+import { Comment } from "../models/comment.models.js";
+import { Like } from "../models/like.models.js";
+import { Playlist } from "../models/playlist.models.js";
 import {
   uploadOnCloudinary,
   deleteFileOnCloudinary,
@@ -13,17 +16,16 @@ const getAllVideos = asyncHandler(async (req, res) => {
   const { page = 1, limit = 10, query, sortBy, sortType, userId } = req.query;
 
   const options = {
-    page: parseInt(page),
+    skip: (parseInt(page) - 1) * parseInt(limit),
     limit: parseInt(limit),
-    sort: {
-      [sortBy]: sortType,
-    },
+    sort: [{ sortBy, sortType }],
   };
 
+  //creating database query based on user query
   if (query) {
     options.criteria = {
       $or: [
-        { tittle: { $regex: query, $options: "i" } },
+        { title: { $regex: query, $options: "i" } },
         { description: { $regex: query, $options: "i" } },
       ],
     };
@@ -33,19 +35,20 @@ const getAllVideos = asyncHandler(async (req, res) => {
     if (options.criteria) {
       options.criteria = { $and: [options.criteria, { owner: userId }] };
     } else {
+      //query for user videos based on userId if query not provided
       options.criteria = { owner: userId };
     }
   }
 
-  const videos = await Video.paginate(options);
+  const videos = await Video.find(options);
+
+  const response = new ApiResponse(200, videos, "Videos fetched successfully.");
 
   if (!videos) {
-    throw new ApiError(404, "Videos not found.");
+    response.message = "Videos related to given query not found.";
   }
 
-  return res
-    .status(200)
-    .json(new ApiResponse(200, videos, "Videos fetched successfully."));
+  return res.status(200).json(response);
 });
 
 const publishAVideo = asyncHandler(async (req, res) => {
@@ -106,17 +109,13 @@ const publishAVideo = asyncHandler(async (req, res) => {
       owner: req.user?._id,
     });
 
-    const publishedVideo = await Video.findById(video?._id);
-
-    if (!publishedVideo) {
+    if (!video) {
       throw new ApiError(400, "Error while publishing video.");
     }
 
     return res
       .status(201)
-      .json(
-        new ApiResponse(201, publishedVideo, "Video created successfully.")
-      );
+      .json(new ApiResponse(201, video, "Video created successfully."));
   } catch (error) {
     await deleteFileOnCloudinary(videoFile?.secure_url, "video");
     await deleteFileOnCloudinary(thumbnail?.secure_url, "image");
@@ -135,7 +134,7 @@ const getVideoById = asyncHandler(async (req, res) => {
     throw new ApiError(404, "Video with given id not found.");
   }
 
-  if (video?.owner !== req.user?._id) {
+  if (video.owner.toString() !== req.user?._id.toString()) {
     const fetchedVideo = await Video.findByIdAndUpdate(
       video?._id,
       {
@@ -183,14 +182,14 @@ const getVideoById = asyncHandler(async (req, res) => {
     },
     {
       $addFields: {
+        isLiked: {
+          $in: [req.user?._id, "$likes.likedBy"],
+        },
         owner: {
           $first: "$owner",
         },
         likes: {
           $sum: "$likes",
-        },
-        isLiked: {
-          $in: [req.user?._id, "$likes.likedBy"],
         },
       },
     },
@@ -206,7 +205,7 @@ const getVideoById = asyncHandler(async (req, res) => {
     req.user?._id,
     {
       $push: {
-        watchHistory: updatedVideo[0]?._id,
+        watchHistory: video?._id,
       },
     },
     {
@@ -238,9 +237,9 @@ const updateVideo = asyncHandler(async (req, res) => {
     throw new ApiError(403, "You are not authorized to update this video.");
   }
 
-  const { title, description } = req.body; // validate every field seperete
-  if (!(title || description)) {
-    throw new ApiError(400, "Tittle or discription is required.");
+  const { title, description } = req.body;
+  if (!(title && description)) {
+    throw new ApiError(400, "Tittle and discription is required.");
   }
 
   let thumbnailLocalPth;
@@ -269,6 +268,7 @@ const updateVideo = asyncHandler(async (req, res) => {
       },
       {
         new: true,
+        runValidators: true,
       }
     );
 
@@ -293,16 +293,25 @@ const deleteVideo = asyncHandler(async (req, res) => {
 
   const video = await Video.findById(videoId);
 
+  if (!video) {
+    throw new ApiError(404, "Video with this id is not found.");
+  }
+
   if (video.owner.toString() !== req.user?._id.toString()) {
     throw new ApiError(403, "You are not authorized to delete this video.");
   }
 
-  const { thumbnail, videoFile } = video;
+  const deleteVideo = await Video.findByIdAndDelete(video?._id);
+
+  if (!deleteVideo) {
+    throw new ApiError(500, "Error while deleting the video.");
+  }
 
   const deleteThumbnailOnCloudinary = await deleteFileOnCloudinary(
-    thumbnail,
+    deleteVideo?.thumbnail,
     "image"
   );
+
   if (!deleteThumbnailOnCloudinary) {
     throw new ApiError(
       501,
@@ -311,7 +320,7 @@ const deleteVideo = asyncHandler(async (req, res) => {
   }
 
   const deleteVideoOnCloudinary = await deleteFileOnCloudinary(
-    videoFile,
+    deleteVideo?.videoFile,
     "video"
   );
 
@@ -319,10 +328,47 @@ const deleteVideo = asyncHandler(async (req, res) => {
     throw new ApiError(501, "Error while removing video file on cloudinary.");
   }
 
-  const deleteVideo = await Video.findByIdAndDelete(videoId);
+  const user = await User.updateMany(
+    { watchHistory: video?._id },
+    {
+      $pullAll: {
+        watchHistory: [video?._id],
+      },
+    },
+    {
+      new: true,
+      runValidators: true,
+    }
+  );
 
-  if (!deleteVideo) {
-    throw new ApiError(500, "Error while deleting the video.");
+  if (!user) {
+    throw new ApiError(404, "Error while updating user watch history.");
+  }
+
+  const deletedVideoLikes = await Like.deleteMany({
+    video: video._id,
+  });
+
+  if (!deletedVideoLikes) {
+    throw new ApiError(500, "Error while deleting video likes.");
+  }
+
+  const deletedVideoComments = await Comment.deleteMany({ video: video._id });
+  if (!deletedVideoComments) {
+    throw new ApiError(500, "Error while deleting video comments.");
+  }
+
+  const deletedVideoFromPlaylist = await Playlist.updateMany(
+    { video: video._id },
+    {
+      $pullAll: {
+        video: [video._id],
+      },
+    }
+  );
+
+  if (!deletedVideoFromPlaylist) {
+    throw new ApiError(500, "Error while deleting video from playlist.");
   }
 
   return res
