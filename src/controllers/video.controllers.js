@@ -129,11 +129,13 @@ const getVideoById = asyncHandler(async (req, res) => {
     throw new ApiError(400, "Invalid video id.");
   }
 
+  // check if video exists
   const video = await Video.findById(videoId);
   if (!video) {
     throw new ApiError(404, "Video with given id not found.");
   }
 
+  // only increment views if video owner is not the user
   if (video.owner.toString() !== req.user?._id.toString()) {
     const fetchedVideo = await Video.findByIdAndUpdate(
       video?._id,
@@ -150,6 +152,7 @@ const getVideoById = asyncHandler(async (req, res) => {
     }
   }
 
+  // get video details
   const updatedVideo = await Video.aggregate([
     {
       $match: {
@@ -195,12 +198,11 @@ const getVideoById = asyncHandler(async (req, res) => {
     },
   ]);
 
-  if (!video) {
-    throw new ApiError(404, "Video with this id is not found.");
+  if (!updatedVideo) {
+    throw new ApiError(404, "Error while fetching video.");
   }
 
-  // only increment views if video owner is not the user
-
+  // update user watch history
   const user = await User.findByIdAndUpdate(
     req.user?._id,
     {
@@ -353,6 +355,7 @@ const deleteVideo = asyncHandler(async (req, res) => {
     throw new ApiError(500, "Error while deleting video likes.");
   }
 
+  const videoComments = await Comment.find({ video: video._id });
   const deletedVideoComments = await Comment.deleteMany({ video: video._id });
   if (!deletedVideoComments) {
     throw new ApiError(500, "Error while deleting video comments.");
