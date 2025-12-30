@@ -1,7 +1,6 @@
 import express from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
-import { handleError } from "./middlewares/error.middleware.js";
 import logger from "./utils/logger.js";
 import morgan from "morgan";
 
@@ -52,7 +51,6 @@ app.use("/api/v1/playlists", playlistRouter);
 app.use("/api/v1/likes", likeRouter);
 app.use("/api/v1/comments", commentRouter);
 
-app.use(handleError);
 // http://localhost:8000/api/v1/users/register
 
 export default app;
