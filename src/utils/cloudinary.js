@@ -1,7 +1,6 @@
 import { v2 as cloudinary } from "cloudinary";
 import fs from "fs";
 import dotenv from "dotenv";
-// import { ApiError } from "./apiError";
 
 dotenv.config();
 
@@ -14,9 +13,8 @@ cloudinary.config({
 
 const uploadOnCloudinary = async (localFilePath) => {
   try {
-    if (!localFilePath) return "Cannot find localFilePath";
+    if (!localFilePath) return null;
     // upload file on cloudinary
-    // have to log response
 
     const response = await cloudinary.uploader.upload(localFilePath, {
       resource_type: "auto",
@@ -27,8 +25,10 @@ const uploadOnCloudinary = async (localFilePath) => {
     return response;
   } catch (error) {
     // remove the locally saved file as the upload opereation got failed
-    fs.unlinkSync(localFilePath);
-    return "file removed successfully after upload proccess got failed";
+    if (localFilePath && fs.existsSync(localFilePath)) {
+      fs.unlinkSync(localFilePath);
+    }
+    return null;
   }
 };
 
