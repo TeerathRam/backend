@@ -137,7 +137,7 @@ const getVideoById = asyncHandler(async (req, res) => {
 
   // only increment views if video owner is not the user
   if (video.owner.toString() !== req.user?._id.toString()) {
-    const fetchedVideo = await Video.findByIdAndUpdate(
+    await Video.findByIdAndUpdate(
       video?._id,
       {
         $inc: {
@@ -146,10 +146,6 @@ const getVideoById = asyncHandler(async (req, res) => {
       },
       { new: true }
     );
-
-    if (!fetchedVideo) {
-      throw new ApiError(404, "Error while updating video views.");
-    }
   }
 
   // get video details
@@ -198,12 +194,8 @@ const getVideoById = asyncHandler(async (req, res) => {
     },
   ]);
 
-  if (!updatedVideo) {
-    throw new ApiError(404, "Error while fetching video.");
-  }
-
   // update user watch history
-  const user = await User.findByIdAndUpdate(
+  await User.findByIdAndUpdate(
     req.user?._id,
     {
       $push: {
@@ -214,10 +206,6 @@ const getVideoById = asyncHandler(async (req, res) => {
       new: true,
     }
   );
-
-  if (!user) {
-    throw new ApiError(404, "Error while updating user watch history.");
-  }
 
   return res
     .status(200)
@@ -230,11 +218,13 @@ const updateVideo = asyncHandler(async (req, res) => {
     throw new ApiError(400, "Invalid video id.");
   }
 
+  // check if video exists
   const video = await Video.findById(videoId);
   if (!video) {
     throw new ApiError(404, "Video with this id is not found.");
   }
 
+  // check user authorization
   if (video.owner.toString() !== req.user?._id.toString()) {
     throw new ApiError(403, "You are not authorized to update this video.");
   }
@@ -258,8 +248,9 @@ const updateVideo = asyncHandler(async (req, res) => {
     throw new ApiError(400, "Error while uploading thumbnail on cloudinary.");
   }
 
+  // update video
   try {
-    const updatedVideo = await Video.findByIdAndUpdate(
+    await Video.findByIdAndUpdate(
       videoId,
       {
         $set: {
@@ -273,10 +264,6 @@ const updateVideo = asyncHandler(async (req, res) => {
         runValidators: true,
       }
     );
-
-    if (!updatedVideo) {
-      throw new ApiError(400, "Error while updating video.");
-    }
 
     return res
       .status(200)
@@ -293,12 +280,14 @@ const deleteVideo = asyncHandler(async (req, res) => {
     throw new ApiError(400, "Invalid video id.");
   }
 
+  // check if video exists
   const video = await Video.findById(videoId);
 
   if (!video) {
     throw new ApiError(404, "Video with this id is not found.");
   }
 
+  // check user authorization
   if (video.owner.toString() !== req.user?._id.toString()) {
     throw new ApiError(403, "You are not authorized to delete this video.");
   }
@@ -330,7 +319,8 @@ const deleteVideo = asyncHandler(async (req, res) => {
     throw new ApiError(501, "Error while removing video file on cloudinary.");
   }
 
-  const user = await User.updateMany(
+  //remove video from all users watch history
+  await User.updateMany(
     { watchHistory: video?._id },
     {
       $pullAll: {
@@ -343,25 +333,22 @@ const deleteVideo = asyncHandler(async (req, res) => {
     }
   );
 
-  if (!user) {
-    throw new ApiError(404, "Error while updating user watch history.");
-  }
+  // delete video likes
+  await Like.deleteMany({ video: video._id });
 
-  const deletedVideoLikes = await Like.deleteMany({
-    video: video._id,
-  });
-
-  if (!deletedVideoLikes) {
-    throw new ApiError(500, "Error while deleting video likes.");
-  }
-
+  // find video comments and delete comments likes
   const videoComments = await Comment.find({ video: video._id });
-  const deletedVideoComments = await Comment.deleteMany({ video: video._id });
-  if (!deletedVideoComments) {
-    throw new ApiError(500, "Error while deleting video comments.");
+  for (const comment of videoComments) {
+    await Like.deleteMany({
+      comment: comment._id,
+    });
   }
 
-  const deletedVideoFromPlaylist = await Playlist.updateMany(
+  // delete video comments
+  await Comment.deleteMany({ video: video._id });
+
+  //remove video from users playlist
+  await Playlist.updateMany(
     { video: video._id },
     {
       $pullAll: {
@@ -369,10 +356,6 @@ const deleteVideo = asyncHandler(async (req, res) => {
       },
     }
   );
-
-  if (!deletedVideoFromPlaylist) {
-    throw new ApiError(500, "Error while deleting video from playlist.");
-  }
 
   return res
     .status(200)
@@ -406,10 +389,6 @@ const togglePublishStatus = asyncHandler(async (req, res) => {
       new: true,
     }
   );
-
-  if (!updatedVideo) {
-    throw new ApiError(500, "Error while toggling publish status of video.");
-  }
 
   return res
     .status(200)
