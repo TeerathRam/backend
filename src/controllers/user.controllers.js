@@ -103,6 +103,7 @@ const registerUser = asyncHandler(async (req, res) => {
     if (!createdUser) {
       throw new ApiError(500, "Something went wrong while registering user.");
     }
+
     // return response
     return res
       .status(201)
@@ -331,13 +332,20 @@ const updateUserAvatar = asyncHandler(async (req, res) => {
       { new: true, runValidators: true }
     ).select("-password -refreshToken -watchHistory");
 
-    const response = await deleteFileOnCloudinary(req.user?.avatar, "image");
+    const cloudinaryAvatarDeleteResponse = await deleteFileOnCloudinary(
+      req.user?.avatar,
+      "image"
+    );
 
-    if (!response) {
+    if (!cloudinaryAvatarDeleteResponse.result === "ok") {
       throw new ApiError(
         400,
         "Error while deleting old avatar from cloudinary."
       );
+    }
+
+    if (!user) {
+      throw new ApiError(500, "Error while updating avatar.");
     }
 
     return res
@@ -373,13 +381,20 @@ const updateUserCoverImage = asyncHandler(async (req, res) => {
       { new: true }
     ).select("-password -refreshToken -watchHistory");
 
-    const response = await deleteFileOnCloudinary(oldCoverImage, "image");
+    const cloudinaryCoverImageDeleteResponse = await deleteFileOnCloudinary(
+      oldCoverImage,
+      "image"
+    );
 
-    if (!response) {
+    if (!cloudinaryCoverImageDeleteResponse.result === "ok") {
       throw new ApiError(
         400,
         "Error while deleting old cover image from cloudinary."
       );
+    }
+
+    if (!user) {
+      throw new ApiError(500, "Error while updating cover image.");
     }
 
     return res
@@ -397,7 +412,6 @@ const getUserChannelProfile = asyncHandler(async (req, res) => {
     throw new ApiError(400, "Username is required.");
   }
 
-  // need to console the channel
   const channel = await User.aggregate([
     {
       // searching for this username
@@ -479,7 +493,7 @@ const getWatchHistory = asyncHandler(async (req, res) => {
         as: "watchHistory",
         pipeline: [
           {
-            // to get user details in every video
+            // to populate owner
             $lookup: {
               from: "users",
               localField: "owner",
