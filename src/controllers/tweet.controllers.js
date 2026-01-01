@@ -39,6 +39,23 @@ const getUserTweets = asyncHandler(async (req, res) => {
     },
     {
       $lookup: {
+        from: "users",
+        localField: "owner",
+        foreignField: "_id",
+        as: "owner",
+        pipeline: [
+          {
+            $project: {
+              username: 1,
+              avatar: 1,
+              fullName: 1,
+            },
+          },
+        ],
+      },
+    },
+    {
+      $lookup: {
         from: "likes",
         foreignField: "tweet",
         localField: "_id",
@@ -47,20 +64,28 @@ const getUserTweets = asyncHandler(async (req, res) => {
     },
     {
       $addFields: {
-        likesCount: { $size: "$likes" },
+        likes: { $size: "$likes" },
       },
     },
   ]);
 
-  return res
-    .status(200)
-    .json(new ApiResponse(200, tweets[0], "Tweets fetched successfully."));
+  let apiResponse = new ApiResponse(
+    200,
+    tweets,
+    "Tweets fetched successfully."
+  );
+
+  if (!tweets.length) {
+    apiResponse.message = "User has no tweets.";
+  }
+
+  return res.status(200).json(apiResponse);
 });
 
 const updateTweet = asyncHandler(async (req, res) => {
   const { content } = req.body;
   if (!content) {
-    throw new ApiError(400, "New content is required.");
+    throw new ApiError(400, "Contentis is required.");
   }
 
   const { tweetId } = req.params;
@@ -90,6 +115,7 @@ const updateTweet = asyncHandler(async (req, res) => {
     },
     {
       new: true,
+      runValidators: true,
     }
   );
 
@@ -118,19 +144,8 @@ const deleteTweet = asyncHandler(async (req, res) => {
     throw new ApiError(403, "You are not authorized to delete this tweet.");
   }
 
-  const deletedTweet = await Tweet.findByIdAndDelete(tweetId);
-
-  if (!deletedTweet) {
-    throw new ApiError(500, "Error while deleting tweet.");
-  }
-
-  const deletedLikes = await Like.deleteMany({
-    tweet: tweetId,
-  });
-
-  if (!deletedLikes) {
-    throw new ApiError(500, "Error while deleting tweet likes.");
-  }
+  await Tweet.findByIdAndDelete(tweetId);
+  await Like.deleteMany({ tweet: tweetId });
 
   return res
     .status(200)
@@ -183,19 +198,13 @@ const getTweetById = asyncHandler(async (req, res) => {
     },
   ]);
 
-  if (!tweet) {
-    throw new ApiError(404, "Tweet with given tweet id not found.");
+  if (!tweet.length) {
+    throw new ApiError(404, "Tweet with given id not found.");
   }
 
   return res
     .status(200)
-    .json(
-      new ApiResponse(
-        200,
-        tweet[0],
-        "Tweet with given tweet id fetched successfully."
-      )
-    );
+    .json(new ApiResponse(200, tweet[0], "Tweet fetched successfully."));
 });
 
 export { createTweet, getUserTweets, updateTweet, deleteTweet, getTweetById };
