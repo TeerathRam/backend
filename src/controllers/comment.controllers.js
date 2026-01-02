@@ -9,7 +9,11 @@ const getVideoComments = asyncHandler(async (req, res) => {
   const { page = 1, limit = 10 } = req.query;
 
   if (!videoId.trim() || !isValidObjectId(videoId)) {
-    throw new ApiError(400, "Invalid video id");
+    throw new ApiError(400, "Invalid video id.");
+  }
+
+  if (isNaN(page) || isNaN(limit)) {
+    throw new ApiError(400, "Page and limit must be numbers.");
   }
 
   const options = {
@@ -21,29 +25,32 @@ const getVideoComments = asyncHandler(async (req, res) => {
     video: videoId,
   })
     .populate("owner", "username avatar")
-    .projection({ owner: 1, content: 1, createdAt: 1 })
     .sort({ createdAt: -1 })
     .skip((options.page - 1) * options.limit)
     .limit(options.limit);
 
-  if (!comments) {
-    throw new ApiError(404, "Comments not found");
+  const newApiResponse = new ApiResponse(
+    200,
+    comments,
+    "Comments fetched successfully."
+  );
+
+  if (!comments.length) {
+    newApiResponse.message = "Video has no comments.";
   }
 
-  return res
-    .status(200)
-    .json(new ApiResponse(200, comments, "Comments fetched successfully"));
+  return res.status(200).json(newApiResponse);
 });
 
 const addComment = asyncHandler(async (req, res) => {
   const { content } = req.body;
   if (!content) {
-    throw new ApiError(400, "Content is required");
+    throw new ApiError(400, "Content is required.");
   }
 
   const { videoId } = req.params;
   if (!videoId.trim() || !isValidObjectId(videoId)) {
-    throw new ApiError(400, "Invalid video id");
+    throw new ApiError(400, "Invalid video id.");
   }
 
   const comment = await Comment.create({
@@ -53,33 +60,33 @@ const addComment = asyncHandler(async (req, res) => {
   });
 
   if (!comment) {
-    throw new ApiError(500, "Error while creating comment");
+    throw new ApiError(500, "Error while creating comment.");
   }
 
   return res
     .status(201)
-    .json(new ApiResponse(201, comment, "Comment created successfully"));
+    .json(new ApiResponse(201, comment, "Comment created successfully."));
 });
 
 const updateComment = asyncHandler(async (req, res) => {
   const { content } = req.body;
   if (!content) {
-    throw new ApiError(400, "New content is required");
+    throw new ApiError(400, "Content is required.");
   }
 
   const { commentId } = req.params;
   if (!commentId.trim() || !isValidObjectId(commentId)) {
-    throw new ApiError(400, "Invalid tweet id or tweet id is required");
+    throw new ApiError(400, "Invalid tweet id or tweet id is required.");
   }
 
   const comment = await Comment.findById(commentId);
 
   if (!comment) {
-    throw new ApiError(404, "Comment not found");
+    throw new ApiError(404, "Comment not found.");
   }
 
   if (comment.owner.toString() !== req.user._id.toString()) {
-    throw new ApiError(403, "You are not authorized to update this comment");
+    throw new ApiError(403, "You are not authorized to update this comment.");
   }
 
   const updatedComment = await Comment.findByIdAndUpdate(
@@ -91,42 +98,43 @@ const updateComment = asyncHandler(async (req, res) => {
     },
     {
       new: true,
+      runValidators: true,
     }
   );
 
   if (!updatedComment) {
-    throw new ApiError(500, "Error while updating the comment");
+    throw new ApiError(500, "Error while updating the comment.");
   }
 
   return res
     .status(200)
-    .json(new ApiResponse(200, updatedComment, "Comment updated successfully"));
+    .json(
+      new ApiResponse(200, updatedComment, "Comment updated successfully.")
+    );
 });
 
 const deleteComment = asyncHandler(async (req, res) => {
   const { commentId } = req.params;
   if (!commentId.trim() || !isValidObjectId(commentId)) {
-    throw new ApiError(400, "Invalid tweet id or tweet id is required");
+    throw new ApiError(400, "Invalid tweet id or tweet id is required.");
   }
 
   const comment = await Comment.findById(commentId);
 
   if (!comment) {
-    throw new ApiError(404, "Comment not found");
+    throw new ApiError(404, "Comment not found.");
   }
 
   if (comment.owner.toString() !== req.user._id.toString()) {
-    throw new ApiError(403, "You are not authorized to delete this comment");
+    throw new ApiError(403, "You are not authorized to delete this comment.");
   }
 
-  const deletedTweet = await Comment.findByIdAndDelete(commentId);
-  if (!deletedTweet) {
-    throw new ApiError(500, "Error while deleting the tweet");
-  }
+  await Comment.findByIdAndDelete(commentId);
+  await Like.deleteMany({ comment: commentId });
 
   return res
     .status(200)
-    .json(new ApiResponse(200, {}, "Tweet deleted successfully"));
+    .json(new ApiResponse(200, {}, "Tweet deleted successfully."));
 });
 
 export { getVideoComments, addComment, updateComment, deleteComment };
