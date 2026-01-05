@@ -7,95 +7,125 @@ import { Like } from "../models/like.models.js";
 const toggleVideoLike = asyncHandler(async (req, res) => {
   const { videoId } = req.params;
   if (!videoId.trim() || !isValidObjectId(videoId)) {
-    throw new ApiError(400, "Invalid video id");
+    throw new ApiError(400, "Invalid video id.");
   }
 
   const like = await Like.findOne({
     video: videoId,
-    user: req.user._id,
+    likedBy: req.user._id,
   });
 
-  if (!like) {
-    throw new ApiError(404, "Like not found");
-  }
+  let newLike = null;
+  if (like) {
+    await Like.findOneAndDelete({
+      video: videoId,
+      likedBy: req.user._id,
+    });
+  } else {
+    newLike = await Like.create({
+      video: videoId,
+      likedBy: req.user._id,
+    });
 
-  const deletedLike = await Like.findOneAndDelete({
-    video: videoId,
-    user: req.user._id,
-  });
-
-  if (!deletedLike) {
-    throw new ApiError(500, "Error while deleting like");
+    if (!newLike) {
+      throw new ApiError(401, "Error while togglig video like.");
+    }
   }
 
   return res
     .status(200)
-    .json(new ApiResponse(200, deletedLike, "Like deleted successfully"));
+    .json(
+      new ApiResponse(
+        200,
+        newLike,
+        "User like on this video toggled successfully."
+      )
+    );
 });
 
 const toggleCommentLike = asyncHandler(async (req, res) => {
   const { commentId } = req.params;
   if (!commentId.trim() || !isValidObjectId(commentId)) {
-    throw new ApiError(400, "Invalid comment id");
+    throw new ApiError(400, "Invalid comment id.");
   }
 
   const like = await Like.findOne({
     comment: commentId,
-    user: req.user._id,
+    likedBy: req.user._id,
   });
 
-  if (!like) {
-    throw new ApiError(404, "Like not found");
-  }
+  let newLike = null;
+  if (like) {
+    await Like.findOneAndDelete({
+      comment: commentId,
+      likedBy: req.user._id,
+    });
+  } else {
+    newLike = await Like.create({
+      comment: commentId,
+      likedBy: req.user._id,
+    });
 
-  const deletedLike = await Like.findOneAndDelete({
-    comment: commentId,
-    user: req.user._id,
-  });
-
-  if (!deletedLike) {
-    throw new ApiError(500, "Error while deleting like");
+    if (!newLike) {
+      throw new ApiError(401, "Error while toggling comment like.");
+    }
   }
 
   return res
     .status(200)
-    .json(new ApiResponse(200, deletedLike, "Like deleted successfully"));
+    .json(
+      new ApiResponse(
+        200,
+        newLike,
+        "User like on this comment toggled successfully."
+      )
+    );
 });
 
 const toggleTweetLike = asyncHandler(async (req, res) => {
   const { tweetId } = req.params;
   if (!tweetId.trim() || !isValidObjectId(tweetId)) {
-    throw new ApiError(400, "Invalid tweet id");
+    throw new ApiError(400, "Invalid tweet id.");
   }
 
   const like = await Like.findOne({
     tweet: tweetId,
-    user: req.user._id,
+    likedBy: req.user._id,
   });
 
-  if (!like) {
-    throw new ApiError(404, "Like not found");
-  }
+  let newLike = null;
+  if (like) {
+    await Like.findOneAndDelete({
+      tweet: tweetId,
+      likedBy: req.user._id,
+    });
+  } else {
+    newLike = await Like.create({
+      tweet: tweetId,
+      likedBy: req.user._id,
+    });
 
-  const deletedLike = await Like.findOneAndDelete({
-    tweet: tweetId,
-    user: req.user._id,
-  });
-
-  if (!deletedLike) {
-    throw new ApiError(500, "Error while deleting like");
+    if (!like) {
+      throw new ApiError(401, "Error while toggling tweet like");
+    }
   }
 
   return res
     .status(200)
-    .json(new ApiResponse(200, deletedLike, "Like deleted successfully"));
+    .json(
+      new ApiResponse(
+        200,
+        newLike,
+        "User like on this tweet toggled successfully."
+      )
+    );
 });
 
 const getLikedVideos = asyncHandler(async (req, res) => {
   const videos = await Like.aggregate([
     {
       $match: {
-        likedBy: new mongoose.Types.ObjectId(req.user._id),
+        likedBy: new mongoose.Types.ObjectId(req?.user?._id),
       },
     },
     {
@@ -131,9 +161,21 @@ const getLikedVideos = asyncHandler(async (req, res) => {
     },
   ]);
 
+  const newApiResponse = new ApiResponse(
+    200,
+    videos,
+    "User liked videos fetched successfully."
+  );
+
+  if (!newApiResponse?.length) {
+    newApiResponse.message = "User has not liked any videos.";
+  }
+
   return res
     .status(200)
-    .json(new ApiResponse(200, videos[0], "Liked videos fetched successfully"));
+    .json(
+      new ApiResponse(200, videos, "User liked videos fetched successfully.")
+    );
 });
 
 export { toggleVideoLike, toggleCommentLike, toggleTweetLike, getLikedVideos };
