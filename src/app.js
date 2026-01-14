@@ -41,6 +41,7 @@ import subscriptionRouter from "./routes/subscription.routes.js";
 import playlistRouter from "./routes/playlist.routes.js";
 import likeRouter from "./routes/like.routes.js";
 import commentRouter from "./routes/comment.routes.js";
+import healthcheckRouter from "./routes/healthcheck.routes.js";
 
 // routes declaration
 app.use("/api/v1/users", userRouter); // integrate router with the app
@@ -50,6 +51,7 @@ app.use("/api/v1/subscriptions", subscriptionRouter);
 app.use("/api/v1/playlists", playlistRouter);
 app.use("/api/v1/likes", likeRouter);
 app.use("/api/v1/comments", commentRouter);
+app.use("/api/v1", healthcheckRouter);
 
 // http://localhost:8000/api/v1/users/register
 
